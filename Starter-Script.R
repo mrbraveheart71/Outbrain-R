@@ -6,6 +6,8 @@ clicks_train  <- fread( "../Data/clicks_train.csv")
 event.col.names=c("display_id","document_id","timestamp","platform","geo_location")
 events <- fread("../Data/events.csv",select = event.col.names)
 documents_meta <- fread("../Data/documents_meta.csv", select = c("document_id","source_id","publisher_id"))
+#documents_entities <- fread("../Data/documents_entities.csv")
+documents_categories <- fread("../Data/documents_categories.csv")
 #documents_meta <- fread("../Data/documents_meta.csv")
 promoted_content <- fread("../Data/promoted_content.csv")
 
@@ -30,6 +32,7 @@ promoted_content <- promoted_content[,c("ad_id","advertiser_id", "campaign_id"),
 setkeyv(promoted_content,"ad_id")
 setkeyv(clicks_train,"ad_id")
 clicks_train <- merge(clicks_train,promoted_content,all.x=T)
+# document category, just take the maximum
 rm(events)
 rm(documents_meta)
 rm(promoted_content)
