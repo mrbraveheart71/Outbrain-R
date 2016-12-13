@@ -10,8 +10,6 @@ clicks_train <- clicks_train[clicks_train$display_id %in% valid_display_ids]
 setkeyv(clicks_train,"ad_id")
 clicks_train <- merge( clicks_train, ad_id_metrics, all.x = T )
 
-
-
 display_ad_metrics <- clicks_train[,j=list(ad_display_prob=mean(prob),ad_display_count=sum(count)),
                               by=list(display_id)]
 setkeyv(clicks_train,"display_id")
@@ -28,8 +26,8 @@ setkeyv(clicks_train,c("ad_id","publisher_id"))
 clicks_train <- merge( clicks_train, ad_publisher_metrics, all.x = T )
 setkeyv(clicks_train,c("ad_id","category_id"))
 clicks_train <- merge( clicks_train, ad_category_metrics, all.x = T )
-setkeyv(clicks_train,c("ad_id","topic_id"))
-clicks_train <- merge( clicks_train, ad_topic_metrics, all.x = T )
+setkeyv(clicks_train,c("ad_id","publisher_id","source_id"))
+clicks_train <- merge( clicks_train, ad_publisher_source_prob, all.x = T )
 setkeyv(clicks_train,c("advertiser_id","publisher_id"))
 clicks_train <- merge( clicks_train, advertiser_publisher_metrics, all.x = T )
 setkeyv(clicks_train,c("advertiser_id","geo_location"))
@@ -54,8 +52,9 @@ svalid <- which(clicks_train$display_id %in% svalidDisplayIds)
 xgb_params = list(
   seed = 0,colsample_bytree = 0.9,colsample_bylevel=1,subsample = 0.9,
   eta = 0.1,max_depth =10,num_parallel_tree = 1,
-  min_child_weight = 10,objective='binary:logistic'
-  #objective="reg:linear"
+  min_child_weight = 10,
+  #objective='binary:logistic'
+  objective="reg:linear"
 )
 gc()
 dtrain = xgb.DMatrix(as.matrix(clicks_train[strain,feature.names,with=FALSE]), label=clicks_train$clicked[strain], missing=NA)
@@ -64,7 +63,7 @@ dvalid = xgb.DMatrix(as.matrix(clicks_train[svalid,feature.names,with=FALSE]), l
 watchlist <- list(valid=dvalid,train=dtrain)
 xgboost.fit <- xgb.train (data=dtrain,xgb_params,missing=NA,early.stop.round = 5,
                           #eval_metric="auc",
-                          eval_metric="logloss",
+                          #eval_metric="logloss",
                           nrounds=50,
                           maximize=FALSE,verbose=1,watchlist = watchlist)
 

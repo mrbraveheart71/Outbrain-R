@@ -3,7 +3,7 @@ library(Metrics)
 library(xgboost)
 
 clicks_train  <- fread( "../Data/clicks_train.csv")
-event.col.names=c("display_id","document_id","timestamp","platform","geo_location")
+event.col.names=c("display_id","document_id","timestamp","platform","geo_location","uuid")
 events <- fread("../Data/events.csv",select = event.col.names)
 documents_meta <- fread("../Data/documents_meta.csv", select = c("document_id","source_id","publisher_id"))
 #documents_entities <- fread("../Data/documents_entities.csv")
@@ -95,8 +95,8 @@ ad_publisher_metrics <- clicks_train[clicks_train$display_id %in% train_display_
 ad_category_metrics <- clicks_train[clicks_train$display_id %in% train_display_ids,j=list(ad_category_prob=mean(clicked),ad_category_count=length(clicked)),
                                     by=list(ad_id,category_id)]
 
-ad_topic_metrics <- clicks_train[clicks_train$display_id %in% train_display_ids,j=list(ad_topic_prob=mean(clicked),ad_topic_count=length(clicked)),
-                                 by=list(ad_id,topic_id)]
+# ad_topic_metrics <- clicks_train[clicks_train$display_id %in% train_display_ids,j=list(ad_topic_prob=mean(clicked),ad_topic_count=length(clicked)),
+#                                  by=list(ad_id,topic_id)]
 
 advertiser_source_metrics <- clicks_train[clicks_train$display_id %in% train_display_ids,j=list(advertiser_source_prob=mean(clicked),advertiser_source_count=length(clicked)),
                                           by=list(advertiser_id,source_id)]
@@ -107,9 +107,14 @@ advertiser_publisher_metrics <- clicks_train[clicks_train$display_id %in% train_
 advertiser_geo_metrics <- clicks_train[clicks_train$display_id %in% train_display_ids,j=list(advertiser_geo_prob=mean(clicked),advertiser_geo_count=length(clicked)),
                                              by=list(advertiser_id,geo_location)]
 
+ad_publisher_source_prob <- clicks_train[clicks_train$display_id %in% train_display_ids,j=list(ad_pub_source_prob=mean(clicked),ad_pub_source_count=length(clicked)),
+                                         by=list(ad_id,publisher_id,source_id)]
+
 feature.names <- c("prob","count","ad_count","ad_doc_prob","ad_doc_count","ad_source_prob","ad_source_count",
                    "advertiser_source_prob","advertiser_source_count","ad_publisher_prob","ad_publisher_count",
-                   "ad_category_prob","ad_category_count","ad_topic_prob","ad_topic_count",
+                   "ad_category_prob","ad_category_count",
+                   "ad_pub_source_prob","ad_pub_source_count",
+                   #"ad_topic_prob","ad_topic_count",
                    "advertiser_publisher_prob","advertiser_publisher_count",
                    "advertiser_geo_prob","advertiser_geo_count",
                    "advertiser_geo_prob","advertiser_geo_count",
@@ -119,12 +124,16 @@ feature.names <- c("prob","count","ad_count","ad_doc_prob","ad_doc_count","ad_so
 if (runType=='Train') {
   save("ad_id_metrics","advertiser_geo_metrics","ad_hours_metrics",
        "click_prob","ad_doc_metrics", "ad_source_metrics","advertiser_source_metrics","ad_publisher_metrics",
-       "ad_category_metrics","ad_topic_metrics","advertiser_publisher_metrics","feature.names","event.col.names",
+       "ad_category_metrics","ad_publisher_source_prob",
+       #"ad_topic_metrics",
+       "advertiser_publisher_metrics","feature.names","event.col.names",
        "sample_display_ids","train_display_ids","valid_display_ids",file=saveFileName)
 } else {
   save("ad_id_metrics","advertiser_geo_metrics","ad_hours_metrics",
        "click_prob","ad_doc_metrics", "ad_source_metrics","advertiser_source_metrics","ad_publisher_metrics",
-       "ad_category_metrics","ad_topic_metrics","advertiser_publisher_metrics","feature.names","event.col.names",
+       "ad_category_metrics","ad_publisher_source_prob",
+       #"ad_topic_metrics",
+       "advertiser_publisher_metrics","feature.names","event.col.names",
        "train_display_ids",file=saveFileName)
 }
 # rm("ad_id_metrics","click_prob","ad_doc_metrics","advertiser_publisher_metrics","ad_source_metrics","advertiser_source_metrics","ad_publisher_metrics","ad_category_metrics",
