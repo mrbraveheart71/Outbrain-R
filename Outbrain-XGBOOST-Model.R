@@ -1,24 +1,27 @@
 library(data.table)
 library(Metrics)
 library(xgboost)
+library(caret)
 
 setwd("C:/R-Studio/Outbrain/Outbrain R")
-runType='Train'
-source("Outbrain-Pre-Process.R")
+# runType='Train'
+# source("Outbrain-Pre-Process.R")
 
 #preProcess("Train")
 
 # Get Display samples to down-scale data
 # do an xgboost
-set.seed(100)
-strainDisplayIds <- sample(valid_display_ids, length(valid_display_ids)*0.8)
-svalidDisplayIds <- setdiff(valid_display_ids, strainDisplayIds)
+
+load("Outbrain XGBOOST Data")
+
+display_ids <- unique(clicks_train$display_id)
+display_ids <- sample(display_ids,3000000)
+clicks_train <- clicks_train[clicks_train$display_id %in% display_ids]
+gc()
+strainDisplayIds <- sample(display_ids, length(display_ids)*0.8)
+svalidDisplayIds <- setdiff(display_ids, strainDisplayIds)
 strain <- which(clicks_train$display_id %in% strainDisplayIds)
 svalid <- which(clicks_train$display_id %in% svalidDisplayIds)
-
-save("clicks_train","strainDisplayIds","svalidDisplayIds","strain","svalid","feature.names",
-     file="Outbrain XGBOOST Data")
-load("Outbrain XGBOOST Model with Data")
 
 xgb_params = list(
   seed = 0,colsample_bytree = 0.9,colsample_bylevel=1,subsample = 0.9,
@@ -41,8 +44,9 @@ xgboost.fit <- xgb.train (data=dtrain,xgb_params,missing=NA,early.stop.round = 5
                           nrounds=50,
                           maximize=FALSE,verbose=1,watchlist = watchlist)
 
-# Valid Score of 35.61
+# Valid Score of 35.55
 save("xgboost.fit",file="Outbrain XGBOOST Model")
+load("Outbrain XGBOOST Model")
 
 importance_matrix <- xgb.importance(model = xgboost.fit, feature.names)
 options(scipen=999)
@@ -67,7 +71,7 @@ clicks_train <- clicks_train[order(clicks_train$display_id)]
 clicks_train_clicked <- clicks_train[clicks_train$clicked==1]
 
 # now just test validation Displays
-s <- sample(svalidDisplayIds,100000)
+s <- sample(svalidDisplayIds,200000)
 #s <- sample(valid_display_ids,100000)
 
 predicted <- lapply(train.preds$ad_id[train.preds$display_id %in% s], function(x) as.numeric(tstrsplit(x,split=" ")))
@@ -75,7 +79,8 @@ actual <- as.list(clicks_train_clicked$ad_id[clicks_train_clicked$display_id %in
   
 map12 <- mapk(12, actual, predicted)
 print(map12)
-# Results was 66.5
+# Results was 66.1
+
 
 #
 # Now prepare test
@@ -85,112 +90,33 @@ library(Metrics)
 library(xgboost)
 
 setwd("C:/R-Studio/Outbrain/Outbrain R")
-runType <- "Test"
+#runType <- "Test"
 #source("Outbrain-Pre-Process.R")
 #rm(clicks_train)
 gc()
-load('Outbrain Aggregate Tables Test')
+load("Outbrain XGBOOST Data Test")
 load("Outbrain XGBOOST Model")
-
-clicks_test   <- fread( "../Data/clicks_test.csv", select=c("ad_id","source_id","document_id","display_id"))
-events <- fread("../Data/events.csv",select = event.col.names)
-documents_meta <- fread("../Data/documents_meta.csv", select = c("document_id","source_id","publisher_id"))
-promoted_content <- fread("../Data/promoted_content.csv")
-documents_categories <- fread("../Data/documents_categories.csv")
-documents_topics <- fread("../Data/documents_topics.csv")
-
-setkeyv(events,"display_id")
-setkeyv(clicks_test,"display_id")
-clicks_test <- merge(clicks_test, events, all.x=T)
-setkeyv(documents_meta,"document_id")
-setkeyv(clicks_test,"document_id")
-clicks_test <- merge(clicks_test, documents_meta, all.x=T)
-promoted_content <- promoted_content[,c("ad_id","advertiser_id", "campaign_id"),with=FALSE]
-setkeyv(promoted_content,"ad_id")
-setkeyv(clicks_test,"ad_id")
-clicks_test <- merge(clicks_test,promoted_content,all.x=T)
-
-setkeyv(documents_categories,"confidence_level")
-max_doc_cat <- documents_categories[,j=list(category_id=last(category_id)),by=list(document_id)]
-setkeyv(max_doc_cat,"document_id")
-setkeyv(clicks_test,"document_id")
-clicks_test <- merge(clicks_test,max_doc_cat,all.x=T)
-# document top, just take the maximum topic
-setkeyv(documents_categories,"confidence_level")
-max_doc_top <- documents_topics[,j=list(topic_id=last(topic_id)),by=list(document_id)]
-setkeyv(max_doc_top,"document_id")
-setkeyv(clicks_test,"document_id")
-clicks_test <- merge(clicks_test,max_doc_top,all.x=T)
-
-rm("events","documents_meta","promoted_content","documents_categories","documents_topics")
-gc()
-
-clicks_test[, timestampHour := hour(ISOdatetime(1970,01,01,0,0,0) + 1465876799998/1e3 + timestamp/1e3)]
-
-setkeyv(clicks_test,"ad_id")
-clicks_test  <- merge( clicks_test , ad_id_metrics, all.x = T )
-display_metrics <- clicks_test[,j=list(ad_count=length(ad_id)),by=list(display_id)]
-setkeyv(clicks_test,c("display_id"))
-clicks_test <- merge( clicks_test, display_metrics, all.x = T )
-
-display_ad_metrics <- clicks_test[,j=list(ad_display_prob=mean(prob),ad_display_count=sum(count)),
-                                   by=list(display_id)]
-setkeyv(clicks_test,"display_id")
-clicks_test <- merge( clicks_test, display_ad_metrics, all.x = T )
-
-# setkeyv(clicks_test,c("ad_id","geo_location"))
-# clicks_test  <- merge( clicks_test , ad_geo_metrics, all.x = T )
-setkeyv(clicks_test,c("ad_id","document_id"))
-clicks_test  <- merge( clicks_test , ad_doc_metrics, all.x = T )
-setkeyv(clicks_test,c("ad_id","source_id"))
-clicks_test <- merge(clicks_test, ad_source_metrics, all.x = T )
-
-setkeyv(clicks_test,c("advertiser_id","source_id"))
-clicks_test <- merge( clicks_test, advertiser_source_metrics, all.x = T )
-setkeyv(clicks_test,c("ad_id","publisher_id"))
-clicks_test <- merge( clicks_test, ad_publisher_metrics, all.x = T )
-setkeyv(clicks_test,c("ad_id","category_id"))
-clicks_test <- merge( clicks_test, ad_category_metrics, all.x = T )
-setkeyv(clicks_test,c("ad_id","topic_id"))
-clicks_test <- merge( clicks_test, ad_topic_metrics, all.x = T )
-
-setkeyv(clicks_test,c("advertiser_id","publisher_id"))
-clicks_test <- merge( clicks_test, advertiser_publisher_metrics, all.x = T )
-setkeyv(clicks_test,c("advertiser_id","geo_location"))
-clicks_test <- merge( clicks_test, advertiser_geo_metrics, all.x = T )
-setkeyv(clicks_test,c("ad_id","timestampHour"))
-clicks_test <- merge( clicks_test, ad_hours_metrics, all.x = T )
-
-clicks_test <- clicks_test[,c(feature.names,"ad_id","display_id"),with=FALSE]
-#clicks_test$platform <- as.integer(clicks_test$platform)
-rm("ad_id_metrics","click_prob","ad_doc_metrics","ad_source_metrics","advertiser_source_metrics","ad_publisher_metrics","ad_category_metrics",
-   "ad_topic_metrics")
-gc()
-save("clicks_test","feature.names",file="Outbrain Test File")
-
 
 # Now prepare submission
-library(data.table)
-library(Metrics)
-library(xgboost)
-
-setwd("C:/R-Studio/Outbrain/Outbrain R")
-load("Outbrain Test File")
-load("Outbrain XGBOOST Model")
 # Break it into two pieces
-half <- as.integer(nrow(clicks_test)/2)
-full <- as.integer(nrow(clicks_test))
-dtest = xgb.DMatrix(as.matrix(clicks_test[1:half,feature.names,with=FALSE]),missing=NA)
-gc()
-clicks_test[1:half, preds := predict(xgboost.fit,newdata=dtest)]
-rm(dtest)
-gc()
-dtest = xgb.DMatrix(as.matrix(clicks_test[(half+1):full,feature.names,with=FALSE]),missing=NA)
-clicks_test[(half+1):full, preds := predict(xgboost.fit,newdata=dtest)]
-rm(dtest)
-gc()
-#clicks_test <- clicks_test[,c("ad_id","display_id","preds"),with=FALSE]
-#clicks_test$preds <- predict(xgboost.fit,newdata=dtest)
+myseq <- c(seq(1,nrow(clicks_test),nrow(clicks_test)/20),nrow(clicks_test)+1)
+
+for (i in 1:20) {
+  print(i)
+  currSeq <- myseq[i]:(myseq[i+1]-1)
+  dtest = xgb.DMatrix(as.matrix(clicks_test[currSeq,feature.names,with=FALSE]),missing=NA)
+  clicks_test[currSeq, preds := predict(xgboost.fit,newdata=dtest)]
+}
+
+# Work in the leakage
+load("Outbrain Data Leakage")
+leaks$leak_prob <- 1
+leaks <- unique(leaks)
+setkeyv(clicks_test,c("display_id","ad_id"))
+setkeyv(leaks,c("display_id","ad_id"))
+clicks_test[,leak_prob:=leaks[clicks_test[,list(display_id,ad_id)],list(leak_prob)]]
+clicks_test[,preds:=ifelse(!is.na(clicks_test$leak_prob),1,clicks_test$preds)]
+#clicks_train[,ad_category_prob:=ad_category_metrics[clicks_train[,list(ad_id,category_id)],list(ad_category_prob)]]
 
 setkey(clicks_test,"preds")
 submission <- clicks_test[,.(ad_id=paste(rev(ad_id),collapse=" ")),by=display_id]
