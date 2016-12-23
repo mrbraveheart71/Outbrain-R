@@ -117,7 +117,7 @@ clicks_train <- merge( clicks_train, ad_source_metrics, all.x = T )
 rm("ad_id_metrics","ad_publisher_metrics","ad_source_metrics")
 gc()
 
-setkeyv(clicks_train,c("display_id","ad_id"))
+setkeyv(clicks_train,c("display_id","prob"))
 clicks_train[,ad_display_first:=prob[order(prob, decreasing=TRUE)][1],by=display_id]
 clicks_train[,ad_display_second:=prob[order(prob, decreasing=TRUE)][2],by=display_id]
 clicks_train[,ad_display_third:=prob[order(prob, decreasing=TRUE)][3],by=display_id]
@@ -136,16 +136,8 @@ clicks_train[,ad_source_display_third:=ad_source_prob[order(ad_source_prob, decr
 clicks_train[,ad_source_display_fourth:=ad_source_prob[order(ad_source_prob, decreasing=TRUE)][4],by=display_id]
 clicks_train[,ad_source_display_five:=ad_source_prob[order(ad_source_prob, decreasing=TRUE)][5],by=display_id]
 
-# clicks_train[,ad_display_max:=max(prob),by=display_id]
-# clicks_train[,ad_publisher_display_ratio_to_max:=ad_publisher_prob/max(ad_publisher_prob),by=display_id]
-# clicks_train[,ad_publisher_display_max:=max(ad_publisher_prob),by=display_id]
-#clicks_train[,ad_publisher_display_order:=rank(-ad_publisher_prob,ties.method="first"),by=display_id]
 
-# display_ad_metrics <- clicks_train[,j=list(ad_id,ad_display_order=rank(-prob,ties.method="first")),
-#                                    by=list(display_id)]
-# display_ad_publisher_metrics <- clicks_train[,j=list(ad_id,ad_publisher_display_order=rank(-ad_publisher_prob,ties.method="first")),
-#                                    by=list(display_id)]
-clicks_train[,uuid:=NULL]
+#clicks_train[,uuid:=NULL]
 clicks_train[,geo_location:=NULL]
 
 # setkeyv(clicks_train,c("display_id","ad_id"))
@@ -156,20 +148,27 @@ clicks_train[,geo_location:=NULL]
 
 setkeyv(clicks_train,c("ad_id","platform"))
 setkeyv(ad_platform_metrics,c("ad_id","platform"))
-clicks_train <- merge( clicks_train, ad_platform_metrics, all.x = T )
+clicks_train[,ad_platform_prob:=ad_platform_metrics[clicks_train[,list(ad_id,platform)],list(ad_platform_prob)]]
+clicks_train[,ad_platform_count:=ad_platform_metrics[clicks_train[,list(ad_id,platform)],list(ad_platform_count)]]
+#clicks_train <- merge( clicks_train, ad_platform_metrics, all.x = T )
 rm(ad_platform_metrics)
 gc()
 # setkeyv(clicks_train,c("ad_id","geo_location"))
 # clicks_train <- merge( clicks_train, ad_geo_metrics, all.x = T )
 setkeyv(clicks_train,c("ad_id","document_id"))
-clicks_train <- merge( clicks_train, ad_doc_metrics, all.x = T )
+setkeyv(ad_doc_metrics,c("ad_id","document_id"))
+clicks_train[,ad_doc_prob:=ad_doc_metrics[clicks_train[,list(ad_id,document_id)],list(ad_doc_prob)]]
+clicks_train[,ad_doc_count:=ad_doc_metrics[clicks_train[,list(ad_id,document_id)],list(ad_doc_count)]]
+#clicks_train <- merge( clicks_train, ad_doc_metrics, all.x = T )
 rm(ad_doc_metrics)
 gc()
 setkeyv(clicks_train,c("advertiser_id","source_id"))
-clicks_train <- merge( clicks_train, advertiser_source_metrics, all.x = T )
+setkeyv(advertiser_source_metrics,c("advertiser_id","source_id"))
+clicks_train[,advertiser_source_prob:=advertiser_source_metrics[clicks_train[,list(advertiser_id,source_id)],list(advertiser_source_prob)]]
+clicks_train[,advertiser_source_count:=advertiser_source_metrics[clicks_train[,list(advertiser_id,source_id)],list(advertiser_source_count)]]
+#clicks_train <- merge( clicks_train, advertiser_source_metrics, all.x = T )
 rm(advertiser_source_metrics)
 gc()
-
 
 # save("clicks_train",file="Outbrain Train Intermediate")
 # load("Outbrain Train Intermediate")
