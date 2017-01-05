@@ -4,6 +4,7 @@ library(xgboost)
 library(caret)
 
 load("Outbrain Train No Aggregates")
+runType <- 'Train'
 
 if (runType=='Train') {
   display_ids <- unique(clicks_train$display_id)
@@ -30,11 +31,13 @@ if (runType=='Train') {
 # advertiser_comb$advertiser_comb_int <- as.integer(as.factor(advertiser_comb$advertiser_comb))
 #rm(advertiser_comb)
 
+threshold <- 20
+
 click_prob = clicks_train[clicks_train$display_id %in% train_display_ids,.(sum(clicked)/.N)]
 click_prob <- as.numeric(click_prob)
 
 ad_id_metrics <- clicks_train[clicks_train$display_id %in% train_display_ids,
-                              j=list(prob=(sum(clicked)+click_prob*20)/(length(clicked)+20)),by=list(ad_id)]
+                              j=list(prob=(sum(clicked)+click_prob*threshold)/(length(clicked)+threshold)),by=list(ad_id)]
 # ad_hours_metrics <- clicks_train[clicks_train$display_id %in% train_display_ids,j=list(ad_hour_prob=mean(clicked),ad_hour_count=length(clicked)),
 #                                by=list(ad_id,timestampHour)]
 ad_platform_metrics <- clicks_train[clicks_train$display_id %in% train_display_ids,j=list(ad_platform_prob=mean(clicked),ad_platform_count=length(clicked)),
@@ -47,12 +50,12 @@ ad_platform_metrics <- clicks_train[clicks_train$display_id %in% train_display_i
 ad_doc_metrics <- clicks_train[clicks_train$display_id %in% train_display_ids,j=list(ad_doc_prob=mean(clicked),ad_doc_count=length(clicked)),
                                by=list(ad_id,document_id)]
 ad_source_metrics <- clicks_train[clicks_train$display_id %in% train_display_ids,
-                                  j=list(ad_source_prob=(sum(clicked)+click_prob*20)/(length(clicked)+20)),
+                                  j=list(ad_source_prob=(sum(clicked)+click_prob*threshold)/(length(clicked)+threshold)),
                                   by=list(ad_id,source_id)]
 # campaign_metrics <- clicks_train[clicks_train$display_id %in% train_display_ids,j=list(campaign_prob=mean(clicked),campaign_count=length(clicked)),
 #                                   by=list(campaign_id)]
 ad_publisher_metrics <- clicks_train[clicks_train$display_id %in% train_display_ids,
-                                     j=list(ad_publisher_prob=(sum(clicked)+click_prob*20)/(length(clicked)+20)),
+                                     j=list(ad_publisher_prob=(sum(clicked)+click_prob*threshold)/(length(clicked)+threshold)),
                                      by=list(ad_id,publisher_id)]
 
 ad_category_metrics <- clicks_train[clicks_train$display_id %in% train_display_ids,j=list(ad_category_prob=mean(clicked),ad_category_count=length(clicked)),
@@ -66,6 +69,12 @@ advertiser_source_metrics <- clicks_train[clicks_train$display_id %in% train_dis
 
 advertiser_publisher_metrics <- clicks_train[clicks_train$display_id %in% train_display_ids,j=list(advertiser_publisher_prob=mean(clicked),advertiser_publisher_count=length(clicked)),
                                              by=list(advertiser_id,publisher_id)]
+
+clicks_train[,uuid:=NULL]
+ad_user_publisher <- clicks_train[clicks_train$display_id %in% train_display_ids,
+                               j=list(ad_user_publisher_prob=mean(clicked),ad_user_publisher_count=length(clicked)),
+                               by=list(ad_id,user_publisher_10)]
+
 
 # advertiser_geo_metrics <- clicks_train[clicks_train$display_id %in% train_display_ids,j=list(advertiser_geo_prob=mean(clicked),advertiser_geo_count=length(clicked)),
 #                                        by=list(advertiser_id,geo_location)]
@@ -85,24 +94,53 @@ agg.tables.train <- c("ad_id_metrics",
                       #"display_ad_publisher_metrics","display_ad_metrics",
                       #"ad_publisher_source_prob",
                       #"ad_topic_metrics",
+                      "ad_user_publisher",
                       "advertiser_publisher_metrics",
                       "train_display_ids","valid_display_ids")
 agg.tables.test <- setdiff(agg.tables.train,c("sample_display_ids","valid_display_ids"))
 
 if (runType=='Train') {
   save(list=agg.tables.train,file=saveFileName)
+  rm(list=setdiff(agg.tables.train,c("train_display_ids","valid_display_ids")))
 } else {
   save(list=agg.tables.test,file=saveFileName)
 }
 
+#### Now do combinations
 if (runType=='Train') {
-  load("Outbrain Train No Aggregates")
+  #load(file=save.file.name)
+  clicks_train[, timestampHour := hour(ISOdatetime(1969,12,31,19,0,0) + 1465876799998/1e3 + timestamp/1e3)]
+  comb.var.names.1 <- c("document_id","source_id","publisher_id","category_id","campaign_id")
+  comb.var.names.2 <- c("ad_count","platform","geo_location","user_publisher_10","timestampHour")
+  comb.var.names.3 <- c("ad_id","advertiser_id")
+  
+  # 2-way interactions with ad_id
+  #comb.matrix  <- t(combn(comb.var.names,no.var))
+  comb.matrix <- as.matrix(expand.grid(comb.var.names.1,comb.var.names.2,comb.var.names.3))
+  # each n-way interaction
+  for (i in 1:nrow(comb.matrix)) {
+    by_cols <- comb.matrix[i,]
+    data_table_name <- as.character(paste0("info_by_",paste0(comb.matrix[i,],collapse="_")))
+    
+    assign(data_table_name,clicks_train[clicks_train$display_id %in% train_display_ids,
+                                        j=list(avg_clicked=mean(clicked),count_clicked=length(clicked)),
+                                        by=by_cols])
+    save(list=data_table_name,file=data_table_name)
+    print(paste0("we processed row ",i," of combination matrix with ",nrow(comb.matrix)," rows"))
+    rm(list=data_table_name)
+  } # first for
+}
+
+####
+
+if (runType=='Train') {
+  #load("Outbrain Train No Aggregates")
   load("Outbrain Aggregate Tables Train")
   clicks_train <- clicks_train[clicks_train$display_id %in% valid_display_ids]
   gc()
 } else {
-  load("Outbrain Test No Aggregates")
-  load("Outbrain Aggregate Tables Test")
+  #load("Outbrain Test No Aggregates")
+  #load("Outbrain Aggregate Tables Test")
   clicks_train <- clicks_test
   rm(clicks_test)
 }
@@ -119,26 +157,26 @@ gc()
 
 setkeyv(clicks_train,c("display_id","prob"))
 clicks_train[,ad_display_first:=prob[order(prob, decreasing=TRUE)][1],by=display_id]
-clicks_train[,ad_display_second:=prob[order(prob, decreasing=TRUE)][2],by=display_id]
-clicks_train[,ad_display_third:=prob[order(prob, decreasing=TRUE)][3],by=display_id]
-clicks_train[,ad_display_fourth:=prob[order(prob, decreasing=TRUE)][4],by=display_id]
-clicks_train[,ad_display_five:=prob[order(prob, decreasing=TRUE)][5],by=display_id]
+clicks_train[,ad_display_second:=prob[order(prob, decreasing=TRUE)][2]-prob,by=display_id]
+clicks_train[,ad_display_third:=prob[order(prob, decreasing=TRUE)][3]-prob,by=display_id]
+clicks_train[,ad_display_fourth:=prob[order(prob, decreasing=TRUE)][4]-prob,by=display_id]
+clicks_train[,ad_display_five:=prob[order(prob, decreasing=TRUE)][5]-prob,by=display_id]
 
 clicks_train[,ad_publisher_display_first:=ad_publisher_prob[order(ad_publisher_prob, decreasing=TRUE)][1],by=display_id]
 clicks_train[,ad_publisher_display_second:=ad_publisher_prob[order(ad_publisher_prob, decreasing=TRUE)][2],by=display_id]
 clicks_train[,ad_publisher_display_third:=ad_publisher_prob[order(ad_publisher_prob, decreasing=TRUE)][3],by=display_id]
-clicks_train[,ad_publisher_display_fourth:=ad_publisher_prob[order(ad_publisher_prob, decreasing=TRUE)][4],by=display_id]
-clicks_train[,ad_publisher_display_five:=ad_publisher_prob[order(ad_publisher_prob, decreasing=TRUE)][5],by=display_id]
+# clicks_train[,ad_publisher_display_fourth:=ad_publisher_prob[order(ad_publisher_prob, decreasing=TRUE)][4],by=display_id]
+# clicks_train[,ad_publisher_display_five:=ad_publisher_prob[order(ad_publisher_prob, decreasing=TRUE)][5],by=display_id]
 
 clicks_train[,ad_source_display_first:=ad_source_prob[order(ad_source_prob, decreasing=TRUE)][1],by=display_id]
 clicks_train[,ad_source_display_second:=ad_source_prob[order(ad_source_prob, decreasing=TRUE)][2],by=display_id]
 clicks_train[,ad_source_display_third:=ad_source_prob[order(ad_source_prob, decreasing=TRUE)][3],by=display_id]
-clicks_train[,ad_source_display_fourth:=ad_source_prob[order(ad_source_prob, decreasing=TRUE)][4],by=display_id]
-clicks_train[,ad_source_display_five:=ad_source_prob[order(ad_source_prob, decreasing=TRUE)][5],by=display_id]
+# clicks_train[,ad_source_display_fourth:=ad_source_prob[order(ad_source_prob, decreasing=TRUE)][4],by=display_id]
+# clicks_train[,ad_source_display_five:=ad_source_prob[order(ad_source_prob, decreasing=TRUE)][5],by=display_id]
 
 
 #clicks_train[,uuid:=NULL]
-clicks_train[,geo_location:=NULL]
+#clicks_train[,geo_location:=NULL]
 
 # setkeyv(clicks_train,c("display_id","ad_id"))
 # clicks_train <- merge( clicks_train, display_ad_metrics, all.x = T )
@@ -189,9 +227,18 @@ clicks_train[,advertiser_publisher_count:=advertiser_publisher_metrics[clicks_tr
 # clicks_train <- merge( clicks_train, advertiser_geo_metrics, all.x = T )
 # setkeyv(clicks_train,c("ad_id","timestampHour"))
 # clicks_train <- merge( clicks_train, ad_hours_metrics, all.x = T )
+rm("advertiser_publisher_metrics","ad_category_metrics")
+
+setkeyv(clicks_train,c("ad_id","user_publisher_10"))
+setkeyv(ad_user_publisher,c("ad_id","user_publisher_10"))
+clicks_train[,ad_user_publisher_prob:=ad_user_publisher[clicks_train[,list(ad_id,user_publisher_10)],list(ad_user_publisher_prob)]]
+clicks_train[,ad_user_publisher_count:=ad_user_publisher[clicks_train[,list(ad_id,user_publisher_10)],list(ad_user_publisher_count)]]
+rm("ad_user_publisher")
 
 feature.names <- c("prob",
                    #"count",
+                   #"user_count","user_traffic_source",
+                   "ad_user_publisher_prob","ad_user_publisher_count",
                    "ad_count","ad_doc_prob","ad_doc_count",
                    "ad_source_prob",#"ad_source_count",
                    "advertiser_source_prob","advertiser_source_count","ad_publisher_prob",#"ad_publisher_count",
@@ -202,8 +249,8 @@ feature.names <- c("prob",
                    #"ad_display_ratio_to_max","ad_publisher_display_ratio_to_max",
                    #"ad_display_max","ad_publisher_display_max",
                    "ad_display_first","ad_display_second","ad_display_third","ad_display_fourth","ad_display_five",
-                   "ad_publisher_display_first","ad_publisher_display_second","ad_publisher_display_third","ad_publisher_display_fourth","ad_publisher_display_five",
-                   "ad_source_display_first","ad_source_display_second","ad_source_display_third","ad_source_display_fourth","ad_source_display_five",
+                   "ad_publisher_display_first","ad_publisher_display_second","ad_publisher_display_third",#"ad_publisher_display_fourth","ad_publisher_display_five",
+                   "ad_source_display_first","ad_source_display_second","ad_source_display_third",#"ad_source_display_fourth","ad_source_display_five",
                    "advertiser_publisher_prob","advertiser_publisher_count")
                    #"advertiser_geo_prob","advertiser_geo_count",
                    #"advertiser_geo_prob","advertiser_geo_count")

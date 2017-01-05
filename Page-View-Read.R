@@ -42,7 +42,9 @@ while (no.rows > 0 ) {
 
 save("page_views_user",file="Outbrain Page View Data of clicks user")
 
+#
 # Now do some aggregates
+#
 load("Outbrain Page View Data of clicks user")
 
 Mode <- function(x) {
@@ -50,8 +52,17 @@ Mode <- function(x) {
   ux[which.max(tabulate(match(x, ux)))]
 }
 
-setkeyv(page_views_user,c("uuid","document_id"))
-user_page_views <- page_views_user[,j=list(user_count=length(document_id),
-                                                  user_traffic_source=Mode(traffic_source)),
-                                     by=list(uuid)]
-save("user_page_views", file="Outbrain Page view Data Aggregates")
+page_views_user[,platform:=NULL]
+page_views_user[,traffic_source:=NULL]
+
+documents_meta <- fread("../Data/documents_meta.csv", select = c("document_id","source_id","publisher_id"))
+setkeyv(page_views_user,c("document_id"))
+setkeyv(documents_meta,c("document_id"))
+
+page_views_user[,publisher_id:=documents_meta[page_views_user[,list(document_id)],list(publisher_id)]]
+
+setkeyv(page_views_user,c("uuid","publisher_id"))
+user_publisher <- page_views_user[,j=list(user_publisher_count=length(publisher_id),user_publisher_source=Mode(publisher_id)),by=list(uuid)]
+user_publisher <- user_publisher[,user_publisher_10:=ifelse(user_publisher_count>10,user_publisher_source,0)]
+
+save("user_publisher", file="Outbrain Page view Data Aggregates")

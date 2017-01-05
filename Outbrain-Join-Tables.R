@@ -4,7 +4,7 @@ library(xgboost)
 library(caret)
 
 runType='Train'
-runType='Test'
+#runType='Test'
 
 if (runType=='Train') {
   clicks_train  <- fread( "../Data/clicks_train.csv")
@@ -60,6 +60,13 @@ gc()
 
 clicks_train[, timestampDay := mday(ISOdatetime(1969,12,31,19,0,0) + 1465876799998/1e3 + timestamp/1e3)]
 gc()
+
+load("Outbrain Page view Data Aggregates")
+setkeyv(clicks_train,c("uuid"))
+setkeyv(user_publisher,c("uuid"))
+clicks_train[,user_publisher_10:=user_publisher[clicks_train[,list(uuid)],list(user_publisher_10)]]
+# clicks_train[,user_traffic_source:=user_page_views[clicks_train[,list(uuid)],list(user_traffic_source)]]
+# rm(user_page_views)
 
 if (runType=='Train') {
   save("clicks_train",file=fileName)
